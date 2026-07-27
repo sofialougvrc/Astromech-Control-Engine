@@ -77,6 +77,13 @@ void testSerialEncoding() {
     servo.params["angle_deg"] = "90";
     require(ace::encodeSerialFrame(servo, endpoint) == "SERVO:1:90\n", "servo angle frame");
 
+    ace::ActuatorCommand panel;
+    panel.type = "servo";
+    panel.action = "open";
+    panel.params["channel"] = "0";
+    panel.params["open_angle_deg"] = "105";
+    require(ace::encodeSerialFrame(panel, endpoint) == "SERVO:0:105\n", "servo action frame");
+
     ace::ActuatorCommand light;
     light.type = "light";
     light.action = "set";

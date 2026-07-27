@@ -1,35 +1,88 @@
-#include <Servo.h>
+#include <Adafruit_PWMServoDriver.h>
+#include <Wire.h>
 
 constexpr unsigned long BAUD_RATE = 115200;
-constexpr byte MAX_SERVOS = 6;
-constexpr byte SERVO_PINS[MAX_SERVOS] = {9, 10, 11, 6, 5, 3};
-constexpr int SERVO_OPEN_DEG = 100;
-constexpr int SERVO_CLOSE_DEG = 15;
-constexpr int SERVO_CENTER_DEG = 90;
+constexpr uint8_t PCA9685_ADDRESS = 0x40;
+constexpr uint8_t PCA9685_SERVO_HZ = 50;
+constexpr uint8_t PCA9685_CHANNELS = 16;
+constexpr size_t MAX_LINE_LENGTH = 96;
 
-Servo servos[MAX_SERVOS];
-bool servoAttached[MAX_SERVOS] = {false};
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(PCA9685_ADDRESS);
 String inputLine;
+bool pcaReady = false;
+
+struct ServoProfile {
+  const char* name;
+  uint16_t minPulseUs;
+  uint16_t maxPulseUs;
+  uint8_t minAngleDeg;
+  uint8_t maxAngleDeg;
+};
+
+constexpr ServoProfile FS90_PROFILE = {"FS90", 500, 2400, 0, 180};
+constexpr ServoProfile MG996R_PROFILE = {"MG996R", 500, 2500, 0, 180};
+constexpr ServoProfile GENERIC_180_PROFILE = {"GENERIC_180", 600, 2400, 0, 180};
+
+ServoProfile servoProfiles[PCA9685_CHANNELS] = {
+  FS90_PROFILE,
+  MG996R_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE,
+  GENERIC_180_PROFILE
+};
+
+void receiveSerialCommands();
+void handleCommand(const String& rawLine);
+void handleServoAngleCommand(const String& channelText, const String& angleText);
+int driveServoAngle(uint8_t channel, int requestedAngle);
+uint16_t angleToPulseUs(int angleDeg, const ServoProfile& profile);
+uint16_t pulseUsToPca9685Ticks(uint16_t pulseUs);
+bool isIntegerText(const String& value);
 
 void setup() {
   Serial.begin(BAUD_RATE);
-  inputLine.reserve(96);
-  pinMode(LED_BUILTIN, OUTPUT);
-  Serial.println("OK:ACE_SLAVE_READY");
+  inputLine.reserve(MAX_LINE_LENGTH);
+  Serial.println("OK:ACE_SERIAL_READY");
+
+  Wire.begin();
+  pcaReady = pwm.begin();
+  if (pcaReady) {
+    pwm.setOscillatorFrequency(27000000);
+    pwm.setPWMFreq(PCA9685_SERVO_HZ);
+    delay(10);
+    Serial.println("OK:ACE_PCA9685_READY");
+  } else {
+    Serial.println("ERR:PCA9685_INIT");
+  }
 }
 
 void loop() {
+  receiveSerialCommands();
+}
+
+void receiveSerialCommands() {
   while (Serial.available() > 0) {
     char c = static_cast<char>(Serial.read());
-    if (c == '\r') {
-      continue;
-    }
+    if (c == '\r') continue;
+
     if (c == '\n') {
-      handleLine(inputLine);
+      handleCommand(inputLine);
       inputLine = "";
       continue;
     }
-    if (inputLine.length() < 95) {
+
+    if (inputLine.length() < MAX_LINE_LENGTH - 1) {
       inputLine += c;
     } else {
       inputLine = "";
@@ -38,95 +91,118 @@ void loop() {
   }
 }
 
-void handleLine(const String& line) {
-  if (line.length() == 0) {
-    return;
-  }
+void handleCommand(const String& rawLine) {
+  String line = rawLine;
+  line.trim();
+
+  if (line.length() == 0) return;
+
   if (line == "PING") {
     Serial.println("OK:PONG");
     return;
   }
+
   if (line == "STATUS") {
-    Serial.println("OK:ACE_SLAVE_READY");
+    // STATUS deliberately stays serial-only. If this fails, debug USB serial,
+    // baud rate, line endings, or parsing before touching I2C or servo wiring.
+    Serial.println("OK:ACE_SERIAL_READY");
+    return;
+  }
+
+  if (line == "PCASTATUS") {
+    // PCASTATUS is the first command that reports the hardware layer. Keeping
+    // it separate from STATUS makes bring-up failures easier to isolate.
+    Serial.println(pcaReady ? "OK:ACE_PCA9685_READY" : "ERR:PCA9685_INIT");
     return;
   }
 
   int first = line.indexOf(':');
   int second = line.indexOf(':', first + 1);
+
   if (first < 0 || second < 0) {
     Serial.println("ERR:BAD_FRAME");
     return;
   }
 
-  String type = line.substring(0, first);
+  String commandType = line.substring(0, first);
   String channelText = line.substring(first + 1, second);
-  String value = line.substring(second + 1);
-  type.toUpperCase();
-  value.toUpperCase();
+  String valueText = line.substring(second + 1);
 
-  int channel = channelText.toInt();
-  if (type == "SERVO") {
-    handleServo(channel, value);
-  } else if (type == "LIGHT") {
-    handleLight(channel, value);
-  } else if (type == "AUDIO") {
-    Serial.println("OK:AUDIO_ACK");
-  } else {
-    Serial.println("ERR:UNKNOWN_TYPE");
+  commandType.toUpperCase();
+  valueText.trim();
+
+  if (commandType == "SERVO") {
+    handleServoAngleCommand(channelText, valueText);
+    return;
   }
+
+  Serial.println("ERR:UNKNOWN_COMMAND");
 }
 
-void handleServo(int channel, const String& value) {
-  int index = channel - 1;
-  if (index < 0 || index >= MAX_SERVOS) {
+void handleServoAngleCommand(const String& channelText, const String& angleText) {
+  if (!pcaReady) {
+    Serial.println("ERR:PCA9685_NOT_READY");
+    return;
+  }
+
+  int channel = channelText.toInt();
+  if (!isIntegerText(channelText) || channel < 0 || channel >= PCA9685_CHANNELS) {
     Serial.println("ERR:SERVO_CHANNEL");
     return;
   }
 
-  if (!servoAttached[index]) {
-    servos[index].attach(SERVO_PINS[index]);
-    servoAttached[index] = true;
+  int requestedAngle = angleText.toInt();
+  if (!isIntegerText(angleText)) {
+    Serial.println("ERR:SERVO_ANGLE");
+    return;
   }
 
-  int angle = SERVO_CENTER_DEG;
-  if (value == "OPEN") {
-    angle = SERVO_OPEN_DEG;
-  } else if (value == "CLOSE" || value == "CLOSED") {
-    angle = SERVO_CLOSE_DEG;
-  } else if (value == "CENTER") {
-    angle = SERVO_CENTER_DEG;
-  } else {
-    angle = value.toInt();
-  }
+  int appliedAngle = driveServoAngle(static_cast<uint8_t>(channel), requestedAngle);
 
-  angle = constrain(angle, 0, 180);
-  servos[index].write(angle);
   Serial.print("OK:SERVO:");
   Serial.print(channel);
   Serial.print(":");
-  Serial.println(angle);
+  Serial.print(appliedAngle);
+  Serial.print(":");
+  Serial.println(servoProfiles[channel].name);
 }
 
-void handleLight(int pin, const String& value) {
-  if (pin < 0 || pin > 53) {
-    Serial.println("ERR:LIGHT_PIN");
-    return;
+int driveServoAngle(uint8_t channel, int requestedAngle) {
+  const ServoProfile& profile = servoProfiles[channel];
+  int clampedAngle = constrain(requestedAngle, profile.minAngleDeg, profile.maxAngleDeg);
+  uint16_t pulseUs = angleToPulseUs(clampedAngle, profile);
+  uint16_t ticks = pulseUsToPca9685Ticks(pulseUs);
+
+  pwm.setPWM(channel, 0, ticks);
+  return clampedAngle;
+}
+
+uint16_t angleToPulseUs(int angleDeg, const ServoProfile& profile) {
+  long pulse = map(
+    angleDeg,
+    profile.minAngleDeg,
+    profile.maxAngleDeg,
+    profile.minPulseUs,
+    profile.maxPulseUs
+  );
+
+  return static_cast<uint16_t>(constrain(pulse, profile.minPulseUs, profile.maxPulseUs));
+}
+
+uint16_t pulseUsToPca9685Ticks(uint16_t pulseUs) {
+  const uint32_t periodUs = 1000000UL / PCA9685_SERVO_HZ;
+  uint32_t ticks = (static_cast<uint32_t>(pulseUs) * 4096UL + periodUs / 2) / periodUs;
+
+  return static_cast<uint16_t>(constrain(ticks, 0UL, 4095UL));
+}
+
+bool isIntegerText(const String& value) {
+  if (value.length() == 0) return false;
+
+  for (unsigned int i = 0; i < value.length(); ++i) {
+    if (i == 0 && (value[i] == '-' || value[i] == '+')) continue;
+    if (!isDigit(value[i])) return false;
   }
 
-  pinMode(pin, OUTPUT);
-  if (value == "ON" || value == "SET" || value == "1") {
-    digitalWrite(pin, HIGH);
-  } else if (value == "OFF" || value == "0") {
-    digitalWrite(pin, LOW);
-  } else if (value == "TOGGLE") {
-    digitalWrite(pin, !digitalRead(pin));
-  } else {
-    Serial.println("ERR:LIGHT_VALUE");
-    return;
-  }
-
-  Serial.print("OK:LIGHT:");
-  Serial.print(pin);
-  Serial.print(":");
-  Serial.println(digitalRead(pin) == HIGH ? "ON" : "OFF");
+  return true;
 }

@@ -2,4 +2,8 @@ build/
 dashboard/dist/
 dashboard/node_modules/
 work/npm-cache/
+.pio/
+firmware/arduino_ace_slave/.pio/
+__pycache__/
+*.pyc
 .DS_Store

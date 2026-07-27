@@ -41,6 +41,26 @@ std::string upper(std::string value) {
     return value;
 }
 
+std::string servoAngleValue(const ActuatorCommand& command) {
+    const auto angle = command.params.find("angle_deg");
+    if (angle != command.params.end()) {
+        return angle->second;
+    }
+
+    const std::string action = upper(command.action);
+    if (action == "OPEN") {
+        return paramOr(command, "open_angle_deg", "100");
+    }
+    if (action == "CLOSE" || action == "CLOSED") {
+        return paramOr(command, "close_angle_deg", "15");
+    }
+    if (action == "CENTER" || action == "IDLE" || action == "STOP") {
+        return paramOr(command, "center_angle_deg", "90");
+    }
+
+    return paramOr(command, "default_angle_deg", "90");
+}
+
 } // namespace
 
 SerialActuator::SerialActuator(std::string id, std::string type, SerialEndpoint endpoint)
@@ -174,8 +194,7 @@ std::optional<std::string> SerialActuator::readAck() {
 std::string encodeSerialFrame(const ActuatorCommand& command, const SerialEndpoint& endpoint) {
     const std::string channel = paramOr(command, "channel", endpoint.channel);
     if (command.type == "servo") {
-        const std::string value = paramOr(command, "angle_deg", upper(command.action));
-        return "SERVO:" + channel + ":" + value + "\n";
+        return "SERVO:" + channel + ":" + servoAngleValue(command) + "\n";
     }
     if (command.type == "light") {
         const std::string value = paramOr(command, "state", upper(command.action));

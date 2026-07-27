@@ -15,7 +15,7 @@ Completed in this repo:
 - Sequence JSON parser and examples.
 - Virtual actuator backend for simulation and tests.
 - Serial actuator UART write path for Arduino-style slave boards.
-- Arduino listener sketch for `SERVO`, `LIGHT`, `PING`, and `STATUS` frames.
+- Arduino Mega + PCA9685 listener sketch for `SERVO`, `PING`, and `STATUS` frames.
 - Jitter, deadline miss, and sync drift telemetry.
 - CLI, benchmark harness, docs, and React/D3 dashboard scaffold.
 
@@ -54,12 +54,14 @@ The dashboard starts with simulated telemetry and will switch to live data when 
 
 - ACE-side serial implementation: `src/actuator_serial.cpp`
 - Arduino listener sketch: `firmware/arduino_ace_slave/arduino_ace_slave.ino`
+- Arduino upload notes: `firmware/arduino_ace_slave/README.md`
+- Staged laptop bring-up script: `scripts/bringup_serial.py`
 - Example hardware config: `config/actuators.example.json`
 - Wire protocol: `docs/SERIAL_PROTOCOL.md`
 
 Default serial baud rate is `115200` on both ACE and Arduino. `make test` includes a guard to catch baud drift before hardware testing.
 
-The serial path is written but not hardware-validated. Start with `PING`, then one LED, then one unloaded servo before connecting panels, drivetrain, or anything with mechanical risk.
+The serial path is written but not hardware-validated. Start with `PING`, then PCA9685 `STATUS`, then one unloaded FS90 on channel `0`, then one unloaded MG996R on channel `1` before connecting panels, drivetrain, or anything with mechanical risk.
 
 ## Stack
 

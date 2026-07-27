@@ -6,7 +6,7 @@
       "backend": "serial",
       "device": "/dev/ttyACM0",
       "baud_rate": 115200,
-      "channel": "1",
+      "channel": "0",
       "wait_for_ack": true
     },
     {
@@ -15,16 +15,7 @@
       "backend": "serial",
       "device": "/dev/ttyACM0",
       "baud_rate": 115200,
-      "channel": "2",
-      "wait_for_ack": true
-    },
-    {
-      "id": "front_logic_lights",
-      "type": "light",
-      "backend": "serial",
-      "device": "/dev/ttyACM0",
-      "baud_rate": 115200,
-      "channel": "13",
+      "channel": "1",
       "wait_for_ack": true
     },
     {
