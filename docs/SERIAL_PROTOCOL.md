@@ -107,6 +107,37 @@ The script stops immediately on the first unexpected response. Its order is:
 python3 scripts/bringup_serial.py /dev/tty.usbmodem1101 --mg996r
 ```
 
+## Fake PCA9685 Bridge
+
+Before hardware arrives, run the same protocol against a laptop-only fake bridge:
+
+```sh
+python3 scripts/fake_pca9685_bridge.py --symlink /tmp/ace_fake_pca9685
+```
+
+In another terminal, run the bring-up script against the fake serial device:
+
+```sh
+python3 scripts/bringup_serial.py /tmp/ace_fake_pca9685
+```
+
+Or run an ACE sequence through the real C++ `SerialActuator` path:
+
+```sh
+make all
+./build/ace_cli sequence-serial sequences/examples/fs90_sweep.seq.json /tmp/ace_fake_pca9685
+```
+
+The fake bridge logs the `setPWM(channel, 0, ticks)` call it would have sent to
+the PCA9685, including the servo profile, clamped angle, pulse width, and final
+12-bit tick value.
+
+If you only want to verify the fake bridge protocol and pulse math:
+
+```sh
+python3 scripts/fake_pca9685_bridge.py --self-test
+```
+
 ## Current Hardware Caveat
 
 This protocol compiles now, but it has not been tested against a physical Arduino yet. First hardware validation should be a single LED or unloaded servo before connecting panels, drive motors, or anything with mechanical risk.

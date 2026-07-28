@@ -1,4 +1,5 @@
 #include "ace/actuator_bus.hpp"
+#include "ace/actuator_serial.hpp"
 #include "ace/actuator_virtual.hpp"
 #include "ace/scheduler.hpp"
 #include "ace/sequence.hpp"
@@ -13,13 +14,21 @@
 
 namespace {
 
-void registerVirtualActuators(ace::ActuatorBus& bus, const std::vector<ace::TimedEvent>& events) {
+void registerActuators(ace::ActuatorBus& bus, const std::vector<ace::TimedEvent>& events, const std::string& serial_device = "") {
     std::map<std::string, std::string> actuators;
     for (const auto& event : events) {
         actuators[event.command.actuator] = event.command.type;
     }
     for (const auto& [id, type] : actuators) {
-        bus.registerActuator(std::make_unique<ace::VirtualActuator>(id, type));
+        if (!serial_device.empty() && type == "servo") {
+            ace::SerialEndpoint endpoint;
+            endpoint.device = serial_device;
+            endpoint.wait_for_ack = true;
+            endpoint.ack_timeout_ms = 500;
+            bus.registerActuator(std::make_unique<ace::SerialActuator>(id, type, endpoint));
+        } else {
+            bus.registerActuator(std::make_unique<ace::VirtualActuator>(id, type));
+        }
     }
 }
 
@@ -61,13 +70,29 @@ void printStates(const ace::ActuatorBus& bus) {
 int runSequence(const std::string& path) {
     ace::CompiledSequence sequence = ace::loadSequenceFile(path);
     ace::ActuatorBus bus;
-    registerVirtualActuators(bus, sequence.events);
+    registerActuators(bus, sequence.events);
 
     ace::Scheduler scheduler(bus);
     scheduler.load(sequence);
     scheduler.run();
 
     std::cout << "sequence=" << sequence.name << '\n';
+    printTelemetry(scheduler.telemetry());
+    printStates(bus);
+    return 0;
+}
+
+int runSequenceSerial(const std::string& path, const std::string& serial_device) {
+    ace::CompiledSequence sequence = ace::loadSequenceFile(path);
+    ace::ActuatorBus bus;
+    registerActuators(bus, sequence.events, serial_device);
+
+    ace::Scheduler scheduler(bus);
+    scheduler.load(sequence);
+    scheduler.run();
+
+    std::cout << "sequence=" << sequence.name << '\n';
+    std::cout << "serial_device=" << serial_device << '\n';
     printTelemetry(scheduler.telemetry());
     printStates(bus);
     return 0;
@@ -82,7 +107,7 @@ int runTrigger(const std::string& path, const std::string& trigger_id) {
 
     ace::CompiledSequence immediate = ace::compileImmediateSequence(trigger_id, found->second.commands);
     ace::ActuatorBus bus;
-    registerVirtualActuators(bus, immediate.events);
+    registerActuators(bus, immediate.events);
 
     ace::Scheduler scheduler(bus);
     scheduler.fireTrigger(found->second);
@@ -96,6 +121,7 @@ int runTrigger(const std::string& path, const std::string& trigger_id) {
 void printUsage() {
     std::cerr << "usage:\n"
               << "  ace_cli sequence <file.seq.json>\n"
+              << "  ace_cli sequence-serial <file.seq.json> <serial-device>\n"
               << "  ace_cli trigger <trigger_map.json> <trigger_id>\n";
 }
 
@@ -105,6 +131,9 @@ int main(int argc, char** argv) {
     try {
         if (argc >= 3 && std::string(argv[1]) == "sequence") {
             return runSequence(argv[2]);
+        }
+        if (argc >= 4 && std::string(argv[1]) == "sequence-serial") {
+            return runSequenceSerial(argv[2], argv[3]);
         }
         if (argc >= 4 && std::string(argv[1]) == "trigger") {
             return runTrigger(argv[2], argv[3]);

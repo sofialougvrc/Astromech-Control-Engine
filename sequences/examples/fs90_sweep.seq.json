@@ -1,0 +1,16 @@
+{
+  "name": "fs90_sweep",
+  "tracks": [
+    {
+      "actuator": "fs90_test_servo",
+      "type": "servo",
+      "events": [
+        { "t_ms": 0, "action": "move_to", "angle_deg": 90, "channel": 0 },
+        { "t_ms": 500, "action": "move_to", "angle_deg": 0, "channel": 0 },
+        { "t_ms": 1000, "action": "move_to", "angle_deg": 180, "channel": 0 },
+        { "t_ms": 1500, "action": "move_to", "angle_deg": 90, "channel": 0 }
+      ]
+    }
+  ],
+  "sync_tolerance_ms": 10
+}

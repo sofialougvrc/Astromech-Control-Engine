@@ -92,6 +92,18 @@ void testSerialEncoding() {
     require(ace::encodeSerialFrame(light, endpoint) == "LIGHT:13:ON\n", "light frame");
 }
 
+void testSerialEncodingUsesPca9685ChannelZero() {
+    ace::SerialEndpoint endpoint;
+    endpoint.channel = "0";
+
+    ace::ActuatorCommand servo;
+    servo.type = "servo";
+    servo.action = "move_to";
+    servo.params["angle_deg"] = "180";
+
+    require(ace::encodeSerialFrame(servo, endpoint) == "SERVO:0:180\n", "servo channel zero frame");
+}
+
 } // namespace
 
 int main() {
@@ -100,6 +112,7 @@ int main() {
         testTriggerParser();
         testSchedulerDispatchesTimedEvents();
         testSerialEncoding();
+        testSerialEncodingUsesPca9685ChannelZero();
     } catch (const std::exception& error) {
         std::cerr << "test failed: " << error.what() << '\n';
         return EXIT_FAILURE;

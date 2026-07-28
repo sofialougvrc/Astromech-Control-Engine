@@ -50,7 +50,8 @@ ACE talks to physical actuators through a serial bridge to an Arduino Mega runni
 - ACE-side serial implementation: `src/actuator_serial.cpp`
 - Arduino listener sketch: `firmware/arduino_ace_slave/arduino_ace_slave.ino`
 - Arduino upload notes: `firmware/arduino_ace_slave/README.md`
-- Bring-up test script: `scripts/bringup_serial.py`
+- Staged laptop bring-up script: `scripts/bringup_serial.py`
+- Fake PCA9685 serial bridge: `scripts/fake_pca9685_bridge.py`
 - Example hardware config: `config/actuators.example.json`
 - Wire protocol: `docs/SERIAL_PROTOCOL.md`
 
