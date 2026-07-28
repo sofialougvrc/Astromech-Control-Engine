@@ -59,6 +59,16 @@ class FakePca9685:
         self.calibration = calibration
         self.log_path = log_path
         self.events = []
+        self.telemetry = []
+        self.sequence = 0
+        self.started_at = time.monotonic()
+
+    def next_sequence(self):
+        self.sequence += 1
+        return self.sequence
+
+    def millis(self):
+        return round((time.monotonic() - self.started_at) * 1000)
 
     def set_servo_angle(self, channel, requested_angle):
         profile = self.calibration.profile_for(channel)
@@ -78,6 +88,18 @@ class FakePca9685:
         self.events.append(event)
         self.log(event)
         return applied_angle, name
+
+    def record_telemetry(self, sequence, received_at_ms, executed_at_ms, command, status, channel=-1, requested_angle=-1, applied_angle=-1, pulse_us=0, ticks=0, i2c_status=255):
+        line = (
+            f"TEL:{sequence}:rx_ms={received_at_ms}:exec_ms={executed_at_ms}:"
+            f"cmd={command}:status={status}:ch={channel}:req={requested_angle}:"
+            f"applied={applied_angle}:pulse_us={pulse_us}:ticks={ticks}:i2c={i2c_status}"
+        )
+        self.telemetry.append(line)
+        self.telemetry = self.telemetry[-16:]
+
+    def telemetry_response(self):
+        return "\n".join([*self.telemetry, f"OK:TELEMETRY:{len(self.telemetry)}"])
 
     def log(self, event):
         line = (
@@ -124,36 +146,52 @@ def parse_profile(profile):
 
 
 def handle_frame(frame, fake_pca):
+    received_at_ms = fake_pca.millis()
+    sequence = fake_pca.next_sequence()
     frame = frame.strip()
     if not frame:
         return None
 
     if frame == "PING":
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "PING", "OK")
         return "OK:PONG"
     if frame == "STATUS":
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "STATUS", "OK")
         return "OK:ACE_SERIAL_READY"
     if frame == "PCASTATUS":
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "PCASTATUS", "OK", i2c_status=0)
         return "OK:ACE_PCA9685_READY"
     if frame == "CALSTATUS":
         lines = []
         for channel in sorted(fake_pca.calibration.channel_profiles):
             name, min_pulse, max_pulse, min_angle, max_angle, home_angle = fake_pca.calibration.profile_for(channel)
             lines.append(f"OK:CAL:{channel}:{name}:{min_pulse}:{max_pulse}:{min_angle}:{max_angle}:{home_angle}")
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "CALSTATUS", "OK")
         return "\n".join(lines)
+    if frame == "TELEMETRY":
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "TELEMETRY", "OK")
+        return fake_pca.telemetry_response()
 
     parts = frame.split(":")
     if len(parts) != 3 or parts[0] != "SERVO":
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "PARSE", "BAD_FRAME")
         return "ERR:BAD_FRAME"
 
     channel = parse_int(parts[1])
     if channel is None or channel < 0 or channel >= PCA9685_CHANNELS:
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "BAD_CHANNEL", channel=channel if channel is not None else -1)
         return "ERR:SERVO_CHANNEL"
 
     angle = parse_int(parts[2])
     if angle is None:
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "BAD_ANGLE", channel=channel)
         return "ERR:SERVO_ANGLE"
 
+    profile = fake_pca.calibration.profile_for(channel)
+    applied_angle, pulse_us = angle_to_pulse_us(angle, profile)
+    ticks = pulse_us_to_ticks(pulse_us)
     applied_angle, profile_name = fake_pca.set_servo_angle(channel, angle)
+    fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "OK", channel=channel, requested_angle=angle, applied_angle=applied_angle, pulse_us=pulse_us, ticks=ticks, i2c_status=0)
     return f"OK:SERVO:{channel}:{applied_angle}:{profile_name}"
 
 
@@ -189,6 +227,9 @@ def main():
             actual = handle_frame(frame, fake_pca)
             if actual != expected:
                 raise RuntimeError(f"{frame!r}: expected {expected!r}, got {actual!r}")
+        telemetry = handle_frame("TELEMETRY", fake_pca)
+        if "TEL:" not in telemetry or not telemetry.endswith("OK:TELEMETRY:10"):
+            raise RuntimeError(f"unexpected telemetry response: {telemetry!r}")
         print("fake PCA9685 bridge self-test: ok")
         return
 

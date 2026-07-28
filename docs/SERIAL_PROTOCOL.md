@@ -15,6 +15,7 @@ PING
 STATUS
 PCASTATUS
 CALSTATUS
+TELEMETRY
 SERVO:<pca9685-channel>:<angle-deg>
 ```
 
@@ -27,6 +28,7 @@ PING
 STATUS
 PCASTATUS
 CALSTATUS
+TELEMETRY
 ```
 
 The Arduino sketch responds with one line per command:
@@ -51,6 +53,17 @@ ERR:BAD_FRAME
 ```text
 OK:CAL:<channel>:<profile>:<min-us>:<max-us>:<min-deg>:<max-deg>:<home-deg>
 ```
+
+`TELEMETRY` prints recent hardware-layer events from the firmware ring buffer,
+ending with `OK:TELEMETRY:<count>`.
+
+```text
+TEL:<seq>:rx_ms=<received>:exec_ms=<executed>:cmd=<cmd>:status=<status>:ch=<channel>:req=<requested-angle>:applied=<applied-angle>:pulse_us=<pulse>:ticks=<pca9685-off-tick>:i2c=<wire-status>
+OK:TELEMETRY:<count>
+```
+
+`rx_ms` and `exec_ms` come from Arduino `millis()`. `i2c=255` means the command
+did not touch I2C, which is expected for `PING` and `STATUS`.
 
 PCA9685 servo channels are zero-based and match the labels on the driver board: `0` through `15`.
 
@@ -116,7 +129,8 @@ The script stops immediately on the first unexpected response. Its order is:
 2. `STATUS`: proves serial parsing/responding without touching PCA9685.
 3. `PCASTATUS`: proves the PCA9685 initialized over I2C.
 4. `SERVO:0:90`, `SERVO:0:0`, `SERVO:0:180`: moves the low-torque FS90 first.
-5. Optional MG996R test:
+5. `TELEMETRY`: prints recent command timing, servo pulse, tick, and I2C status.
+6. Optional MG996R test:
 
 ```sh
 python3 scripts/bringup_serial.py /dev/tty.usbmodem1101 --mg996r

@@ -50,6 +50,22 @@ def require_ok_prefix(response, prefix, stage):
         raise RuntimeError(f"{stage} failed: expected prefix {prefix!r}, got {response!r}")
 
 
+def print_telemetry(port):
+    """Ask the bridge for its recent hardware-layer timing and I2C log."""
+    print("> TELEMETRY")
+    port.reset_input_buffer()
+    port.write(b"TELEMETRY\n")
+    port.flush()
+
+    while True:
+        line = port.readline().decode("ascii", errors="replace").strip()
+        if not line:
+            raise RuntimeError("No response while reading TELEMETRY")
+        print(f"< {line}")
+        if line.startswith("OK:TELEMETRY:"):
+            return
+
+
 def run_fs90_sequence(port):
     # Channel 0 is the low-torque FS90 bench-test servo. These raw positional
     # moves intentionally avoid easing/smoothing so you can observe the hardware
@@ -117,6 +133,10 @@ def main():
             print()
             print("Skipping MG996R high-torque test.")
             print("Run again with --mg996r when the servo is unloaded and you are ready.")
+
+        print()
+        print("Recent hardware-layer telemetry:")
+        print_telemetry(port)
 
     print()
     print("Bring-up test completed successfully.")
