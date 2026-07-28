@@ -1,6 +1,8 @@
 #include <Adafruit_PWMServoDriver.h>
 #include <Wire.h>
 
+#include "servo_calibration.hpp"
+
 constexpr unsigned long BAUD_RATE = 115200;
 constexpr uint8_t PCA9685_ADDRESS = 0x40;
 constexpr uint8_t PCA9685_SERVO_HZ = 50;
@@ -11,36 +13,7 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(PCA9685_ADDRESS);
 String inputLine;
 bool pcaReady = false;
 
-struct ServoProfile {
-  const char* name;
-  uint16_t minPulseUs;
-  uint16_t maxPulseUs;
-  uint8_t minAngleDeg;
-  uint8_t maxAngleDeg;
-};
-
-constexpr ServoProfile FS90_PROFILE = {"FS90", 500, 2400, 0, 180};
-constexpr ServoProfile MG996R_PROFILE = {"MG996R", 500, 2500, 0, 180};
-constexpr ServoProfile GENERIC_180_PROFILE = {"GENERIC_180", 600, 2400, 0, 180};
-
-ServoProfile servoProfiles[PCA9685_CHANNELS] = {
-  FS90_PROFILE,
-  MG996R_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE,
-  GENERIC_180_PROFILE
-};
+ServoProfile servoProfiles[PCA9685_CHANNELS];
 
 void receiveSerialCommands();
 void handleCommand(const String& rawLine);
@@ -49,10 +22,12 @@ int driveServoAngle(uint8_t channel, int requestedAngle);
 uint16_t angleToPulseUs(int angleDeg, const ServoProfile& profile);
 uint16_t pulseUsToPca9685Ticks(uint16_t pulseUs);
 bool isIntegerText(const String& value);
+void printCalibration(uint8_t channel);
 
 void setup() {
   Serial.begin(BAUD_RATE);
   inputLine.reserve(MAX_LINE_LENGTH);
+  loadServoCalibration(servoProfiles, PCA9685_CHANNELS);
   Serial.println("OK:ACE_SERIAL_READY");
 
   Wire.begin();
@@ -113,6 +88,12 @@ void handleCommand(const String& rawLine) {
     // PCASTATUS is the first command that reports the hardware layer. Keeping
     // it separate from STATUS makes bring-up failures easier to isolate.
     Serial.println(pcaReady ? "OK:ACE_PCA9685_READY" : "ERR:PCA9685_INIT");
+    return;
+  }
+
+  if (line == "CALSTATUS") {
+    printCalibration(0);
+    printCalibration(1);
     return;
   }
 
@@ -205,4 +186,24 @@ bool isIntegerText(const String& value) {
   }
 
   return true;
+}
+
+void printCalibration(uint8_t channel) {
+  if (channel >= PCA9685_CHANNELS) return;
+
+  const ServoProfile& profile = servoProfiles[channel];
+  Serial.print("OK:CAL:");
+  Serial.print(channel);
+  Serial.print(":");
+  Serial.print(profile.name);
+  Serial.print(":");
+  Serial.print(profile.minPulseUs);
+  Serial.print(":");
+  Serial.print(profile.maxPulseUs);
+  Serial.print(":");
+  Serial.print(profile.minAngleDeg);
+  Serial.print(":");
+  Serial.print(profile.maxAngleDeg);
+  Serial.print(":");
+  Serial.println(profile.homeAngleDeg);
 }

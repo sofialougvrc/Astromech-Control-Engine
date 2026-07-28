@@ -1,0 +1,41 @@
+{
+  "pwm_hz": 50,
+  "default_profile": {
+    "name": "GENERIC_180",
+    "min_pulse_us": 600,
+    "max_pulse_us": 2400,
+    "min_angle_deg": 0,
+    "max_angle_deg": 180,
+    "home_angle_deg": 90
+  },
+  "channels": [
+    {
+      "channel": 0,
+      "actuator_id": "fs90_test_servo",
+      "model": "FEETECH FS90",
+      "profile": {
+        "name": "FS90",
+        "min_pulse_us": 500,
+        "max_pulse_us": 2400,
+        "min_angle_deg": 0,
+        "max_angle_deg": 180,
+        "home_angle_deg": 90
+      },
+      "notes": "Initial safe bench servo. Replace pulse values with measured endpoints."
+    },
+    {
+      "channel": 1,
+      "actuator_id": "mg996r_test_servo",
+      "model": "MG996R 180 metal gear",
+      "profile": {
+        "name": "MG996R",
+        "min_pulse_us": 500,
+        "max_pulse_us": 2500,
+        "min_angle_deg": 0,
+        "max_angle_deg": 180,
+        "home_angle_deg": 90
+      },
+      "notes": "Higher-torque test servo. Calibrate unloaded before attaching mechanisms."
+    }
+  ]
+}

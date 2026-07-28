@@ -11,6 +11,7 @@ without an Arduino, PCA9685, or servos attached.
 """
 
 import argparse
+import json
 import os
 import pty
 import select
@@ -25,23 +26,16 @@ PCA9685_SERVO_HZ = 50
 PCA9685_TICKS = 4096
 PCA9685_CHANNELS = 16
 
-SERVO_PROFILES = {
-    0: ("FS90", 500, 2400, 0, 180),
-    1: ("MG996R", 500, 2500, 0, 180),
-}
-GENERIC_PROFILE = ("GENERIC_180", 600, 2400, 0, 180)
+DEFAULT_CALIBRATION_PATH = "config/servo_calibration.example.json"
+DEFAULT_PROFILE = ("GENERIC_180", 600, 2400, 0, 180, 90)
 
 
 def clamp(value, low, high):
     return max(low, min(high, value))
 
 
-def servo_profile(channel):
-    return SERVO_PROFILES.get(channel, GENERIC_PROFILE)
-
-
 def angle_to_pulse_us(angle_deg, profile):
-    _, min_pulse, max_pulse, min_angle, max_angle = profile
+    _, min_pulse, max_pulse, min_angle, max_angle, _ = profile
     clamped_angle = clamp(angle_deg, min_angle, max_angle)
     span_in = max_angle - min_angle
     span_out = max_pulse - min_pulse
@@ -61,13 +55,14 @@ def parse_int(text):
 
 
 class FakePca9685:
-    def __init__(self, log_path=None):
+    def __init__(self, calibration, log_path=None):
+        self.calibration = calibration
         self.log_path = log_path
         self.events = []
 
     def set_servo_angle(self, channel, requested_angle):
-        profile = servo_profile(channel)
-        name, _, _, _, _ = profile
+        profile = self.calibration.profile_for(channel)
+        name, _, _, _, _, _ = profile
         applied_angle, pulse_us = angle_to_pulse_us(requested_angle, profile)
         ticks = pulse_us_to_ticks(pulse_us)
 
@@ -96,6 +91,38 @@ class FakePca9685:
                 output.write(line + "\n")
 
 
+class ServoCalibration:
+    def __init__(self, default_profile=DEFAULT_PROFILE, channel_profiles=None):
+        self.default_profile = default_profile
+        self.channel_profiles = channel_profiles or {}
+
+    @classmethod
+    def from_file(cls, path):
+        with open(path, "r", encoding="utf-8") as input_file:
+            data = json.load(input_file)
+
+        default_profile = parse_profile(data["default_profile"])
+        channel_profiles = {}
+        for entry in data.get("channels", []):
+            channel_profiles[int(entry["channel"])] = parse_profile(entry["profile"])
+
+        return cls(default_profile=default_profile, channel_profiles=channel_profiles)
+
+    def profile_for(self, channel):
+        return self.channel_profiles.get(channel, self.default_profile)
+
+
+def parse_profile(profile):
+    return (
+        profile["name"],
+        int(profile["min_pulse_us"]),
+        int(profile["max_pulse_us"]),
+        int(profile["min_angle_deg"]),
+        int(profile["max_angle_deg"]),
+        int(profile.get("home_angle_deg", 90)),
+    )
+
+
 def handle_frame(frame, fake_pca):
     frame = frame.strip()
     if not frame:
@@ -107,6 +134,12 @@ def handle_frame(frame, fake_pca):
         return "OK:ACE_SERIAL_READY"
     if frame == "PCASTATUS":
         return "OK:ACE_PCA9685_READY"
+    if frame == "CALSTATUS":
+        lines = []
+        for channel in sorted(fake_pca.calibration.channel_profiles):
+            name, min_pulse, max_pulse, min_angle, max_angle, home_angle = fake_pca.calibration.profile_for(channel)
+            lines.append(f"OK:CAL:{channel}:{name}:{min_pulse}:{max_pulse}:{min_angle}:{max_angle}:{home_angle}")
+        return "\n".join(lines)
 
     parts = frame.split(":")
     if len(parts) != 3 or parts[0] != "SERVO":
@@ -133,16 +166,19 @@ def install_symlink(target, symlink_path):
 def main():
     parser = argparse.ArgumentParser(description="Run a fake ACE PCA9685 serial bridge.")
     parser.add_argument("--symlink", default="/tmp/ace_fake_pca9685", help="Stable serial-port symlink to create")
+    parser.add_argument("--calibration", default=DEFAULT_CALIBRATION_PATH, help="Servo calibration JSON to load at startup")
     parser.add_argument("--log", help="Optional file for fake PCA9685 setPWM logs")
     parser.add_argument("--self-test", action="store_true", help="Run protocol/math checks without opening a pseudo-terminal")
     args = parser.parse_args()
+    calibration = ServoCalibration.from_file(args.calibration)
 
     if args.self_test:
-        fake_pca = FakePca9685()
+        fake_pca = FakePca9685(calibration)
         checks = [
             ("PING", "OK:PONG"),
             ("STATUS", "OK:ACE_SERIAL_READY"),
             ("PCASTATUS", "OK:ACE_PCA9685_READY"),
+            ("CALSTATUS", "OK:CAL:0:FS90:500:2400:0:180:90\nOK:CAL:1:MG996R:500:2500:0:180:90"),
             ("SERVO:0:90", "OK:SERVO:0:90:FS90"),
             ("SERVO:0:-20", "OK:SERVO:0:0:FS90"),
             ("SERVO:1:200", "OK:SERVO:1:180:MG996R"),
@@ -161,7 +197,7 @@ def main():
     slave_name = os.ttyname(slave_fd)
     install_symlink(slave_name, args.symlink)
 
-    fake_pca = FakePca9685(args.log)
+    fake_pca = FakePca9685(calibration, args.log)
     buffer = bytearray()
     running = True
 

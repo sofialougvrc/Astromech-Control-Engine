@@ -52,6 +52,7 @@ ACE talks to physical actuators through a serial bridge to an Arduino Mega runni
 - Arduino upload notes: `firmware/arduino_ace_slave/README.md`
 - Staged laptop bring-up script: `scripts/bringup_serial.py`
 - Fake PCA9685 serial bridge: `scripts/fake_pca9685_bridge.py`
+- Servo calibration data: `config/servo_calibration.example.json`
 - Example hardware config: `config/actuators.example.json`
 - Wire protocol: `docs/SERIAL_PROTOCOL.md`
 

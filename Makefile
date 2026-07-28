@@ -30,6 +30,7 @@ build/stress_actuators: $(ACE_SOURCES) bench/stress_actuators.cpp | build
 test: build/ace_tests
 	./build/ace_tests
 	bash tests/verify_baud_rate.sh
+	python3 tests/verify_servo_calibration.py
 	python3 scripts/fake_pca9685_bridge.py --self-test
 
 clean:

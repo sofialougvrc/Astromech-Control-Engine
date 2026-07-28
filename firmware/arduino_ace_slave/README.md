@@ -15,6 +15,7 @@ Install these libraries through Arduino Library Manager:
 - Baud used by ACE protocol: `115200`
 - PCA9685 I2C address: `0x40`
 - Servo PWM frequency: `50Hz`
+- Calibration table: `servo_calibration.hpp`
 
 ## PlatformIO
 
@@ -42,6 +43,7 @@ After upload, open Serial Monitor at `115200` baud with newline line endings and
 PING
 STATUS
 PCASTATUS
+CALSTATUS
 SERVO:0:90
 SERVO:0:0
 SERVO:0:180
@@ -54,6 +56,7 @@ Expected responses:
 OK:PONG
 OK:ACE_SERIAL_READY
 OK:ACE_PCA9685_READY
+OK:CAL:0:FS90:500:2400:0:180:90
 OK:SERVO:0:90:FS90
 OK:SERVO:1:90:MG996R
 ```
@@ -78,8 +81,8 @@ python3 scripts/bringup_serial.py /dev/tty.usbmodem1101 --mg996r
 
 ## Channel Profiles
 
-- Channel `0`: FEETECH FS90, `500-2400us`
-- Channel `1`: MG996R, `500-2500us`
-- Channels `2-15`: generic 180 degree servo, `600-2400us`
+- Channel `0`: FEETECH FS90, `500-2400us`, home `90`
+- Channel `1`: MG996R, `500-2500us`, home `90`
+- Channels `2-15`: generic 180 degree servo, `600-2400us`, home `90`
 
-These are first-pass calibration values. If a servo buzzes, binds, or pushes into its physical stop, narrow that channel's pulse range in `servoProfiles`.
+These are first-pass calibration values. If a servo buzzes, binds, or pushes into its physical stop, narrow that channel's pulse range in `servo_calibration.hpp`.

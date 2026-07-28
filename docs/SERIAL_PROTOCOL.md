@@ -14,6 +14,7 @@ Default baud rate is `115200` on both sides:
 PING
 STATUS
 PCASTATUS
+CALSTATUS
 SERVO:<pca9685-channel>:<angle-deg>
 ```
 
@@ -25,6 +26,7 @@ SERVO:1:135
 PING
 STATUS
 PCASTATUS
+CALSTATUS
 ```
 
 The Arduino sketch responds with one line per command:
@@ -43,6 +45,12 @@ ERR:BAD_FRAME
 `PING` and `STATUS` are serial-layer checks only. They do not depend on PCA9685 readiness and should work even if the servo driver board is unplugged.
 
 `PCASTATUS` is the first hardware-layer readiness check. Use it before sending servo commands.
+
+`CALSTATUS` prints the startup calibration table for the named channels, using:
+
+```text
+OK:CAL:<channel>:<profile>:<min-us>:<max-us>:<min-deg>:<max-deg>:<home-deg>
+```
 
 PCA9685 servo channels are zero-based and match the labels on the driver board: `0` through `15`.
 
@@ -68,6 +76,13 @@ The Arduino firmware keeps per-channel servo profiles instead of assuming one un
 - Channels `2-15`: generic 180 degree profile, starts at `600-2400us`
 
 These are conservative bench-test values. Servo batches vary, especially with generic MG996R-compatible parts. If a servo buzzes, binds, or hits an end stop before the requested angle, narrow that profile's pulse range before mounting the servo in a mechanism.
+
+Calibration data lives in two places:
+
+- Firmware startup table: `firmware/arduino_ace_slave/servo_calibration.hpp`
+- Laptop/fake bridge JSON: `config/servo_calibration.example.json`
+
+The fake bridge loads the JSON at startup. The Arduino sketch loads its calibration table during `setup()` into the runtime `servoProfiles` array.
 
 At `50Hz`, one PCA9685 PWM period is about `20,000us`. The PCA9685 divides that period into `4096` ticks, so one tick is about `4.88us`. The firmware converts angle to pulse microseconds first, then converts microseconds to PCA9685 ticks.
 
