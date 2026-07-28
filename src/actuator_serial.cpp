@@ -86,7 +86,15 @@ Clock::time_point SerialActuator::apply(const ActuatorCommand& command) {
     state_.params["baud_rate"] = std::to_string(endpoint_.baud_rate);
     state_.params["serial_frame"] = frame;
     if (endpoint_.wait_for_ack) {
-        state_.params["serial_ack"] = readAck().value_or("timeout");
+        const auto ack = readAck();
+        if (!ack) {
+            state_.params["serial_ack"] = "timeout";
+            throw std::runtime_error("serial ACK timeout from " + endpoint_.device + " after frame: " + frame);
+        }
+        state_.params["serial_ack"] = *ack;
+        if (ack->starts_with("ERR:")) {
+            throw std::runtime_error("serial bridge rejected frame " + frame + " with " + *ack);
+        }
     }
     state_.committed_at = Clock::now();
     return state_.committed_at;

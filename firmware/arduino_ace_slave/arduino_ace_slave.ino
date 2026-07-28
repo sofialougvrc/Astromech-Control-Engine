@@ -189,7 +189,7 @@ void handleServoAngleCommand(uint32_t sequence, unsigned long receivedAtMs, cons
   Serial.print(result.appliedAngle);
   Serial.print(":");
   Serial.println(servoProfiles[channel].name);
-  recordTelemetry(sequence, receivedAtMs, millis(), "SERVO", "OK", channel, requestedAngle, result.appliedAngle, result.pulseUs, result.ticks, result.i2cStatus);
+  recordTelemetry(sequence, receivedAtMs, millis(), "SERVO", requestedAngle == result.appliedAngle ? "OK" : "CLAMPED", channel, requestedAngle, result.appliedAngle, result.pulseUs, result.ticks, result.i2cStatus);
 }
 
 ServoDriveResult driveServoAngle(uint8_t channel, int requestedAngle) {

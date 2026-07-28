@@ -55,9 +55,12 @@ def parse_int(text):
 
 
 class FakePca9685:
-    def __init__(self, calibration, log_path=None):
+    def __init__(self, calibration, log_path=None, pca_ready=True, fail_after_servo_writes=None):
         self.calibration = calibration
         self.log_path = log_path
+        self.pca_ready = pca_ready
+        self.fail_after_servo_writes = fail_after_servo_writes
+        self.servo_writes = 0
         self.events = []
         self.telemetry = []
         self.sequence = 0
@@ -71,6 +74,12 @@ class FakePca9685:
         return round((time.monotonic() - self.started_at) * 1000)
 
     def set_servo_angle(self, channel, requested_angle):
+        if not self.pca_ready:
+            raise RuntimeError("PCA9685_NOT_READY")
+        if self.fail_after_servo_writes is not None and self.servo_writes >= self.fail_after_servo_writes:
+            self.pca_ready = False
+            raise RuntimeError("PCA9685_I2C")
+
         profile = self.calibration.profile_for(channel)
         name, _, _, _, _, _ = profile
         applied_angle, pulse_us = angle_to_pulse_us(requested_angle, profile)
@@ -85,6 +94,7 @@ class FakePca9685:
             "pulse_us": pulse_us,
             "ticks": ticks,
         }
+        self.servo_writes += 1
         self.events.append(event)
         self.log(event)
         return applied_angle, name
@@ -159,8 +169,8 @@ def handle_frame(frame, fake_pca):
         fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "STATUS", "OK")
         return "OK:ACE_SERIAL_READY"
     if frame == "PCASTATUS":
-        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "PCASTATUS", "OK", i2c_status=0)
-        return "OK:ACE_PCA9685_READY"
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "PCASTATUS", "OK" if fake_pca.pca_ready else "I2C_ERR", i2c_status=0 if fake_pca.pca_ready else 2)
+        return "OK:ACE_PCA9685_READY" if fake_pca.pca_ready else "ERR:PCA9685_INIT"
     if frame == "CALSTATUS":
         lines = []
         for channel in sorted(fake_pca.calibration.channel_profiles):
@@ -187,11 +197,19 @@ def handle_frame(frame, fake_pca):
         fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "BAD_ANGLE", channel=channel)
         return "ERR:SERVO_ANGLE"
 
+    if not fake_pca.pca_ready:
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "PCA9685_NOT_READY", channel=channel, requested_angle=angle, i2c_status=2)
+        return "ERR:PCA9685_NOT_READY"
+
     profile = fake_pca.calibration.profile_for(channel)
     applied_angle, pulse_us = angle_to_pulse_us(angle, profile)
     ticks = pulse_us_to_ticks(pulse_us)
-    applied_angle, profile_name = fake_pca.set_servo_angle(channel, angle)
-    fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "OK", channel=channel, requested_angle=angle, applied_angle=applied_angle, pulse_us=pulse_us, ticks=ticks, i2c_status=0)
+    try:
+        applied_angle, profile_name = fake_pca.set_servo_angle(channel, angle)
+    except RuntimeError:
+        fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "I2C_ERR", channel=channel, requested_angle=angle, i2c_status=2)
+        return "ERR:PCA9685_I2C"
+    fake_pca.record_telemetry(sequence, received_at_ms, fake_pca.millis(), "SERVO", "OK" if angle == applied_angle else "CLAMPED", channel=channel, requested_angle=angle, applied_angle=applied_angle, pulse_us=pulse_us, ticks=ticks, i2c_status=0)
     return f"OK:SERVO:{channel}:{applied_angle}:{profile_name}"
 
 
@@ -205,6 +223,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run a fake ACE PCA9685 serial bridge.")
     parser.add_argument("--symlink", default="/tmp/ace_fake_pca9685", help="Stable serial-port symlink to create")
     parser.add_argument("--calibration", default=DEFAULT_CALIBRATION_PATH, help="Servo calibration JSON to load at startup")
+    parser.add_argument("--pca-unavailable", action="store_true", help="Simulate a missing/non-ACKing PCA9685")
+    parser.add_argument("--fail-after-servo-writes", type=int, help="Simulate I2C failure after N successful servo writes")
+    parser.add_argument("--drop-after-frames", type=int, help="Close the pseudo-port after N received frames")
     parser.add_argument("--log", help="Optional file for fake PCA9685 setPWM logs")
     parser.add_argument("--self-test", action="store_true", help="Run protocol/math checks without opening a pseudo-terminal")
     args = parser.parse_args()
@@ -230,6 +251,27 @@ def main():
         telemetry = handle_frame("TELEMETRY", fake_pca)
         if "TEL:" not in telemetry or not telemetry.endswith("OK:TELEMETRY:10"):
             raise RuntimeError(f"unexpected telemetry response: {telemetry!r}")
+
+        failing_pca = FakePca9685(calibration, pca_ready=False)
+        failure_checks = [
+            ("PCASTATUS", "ERR:PCA9685_INIT"),
+            ("SERVO:0:90", "ERR:PCA9685_NOT_READY"),
+            ("TELEMETRY", None),
+        ]
+        for frame, expected in failure_checks:
+            actual = handle_frame(frame, failing_pca)
+            if expected is not None and actual != expected:
+                raise RuntimeError(f"{frame!r}: expected {expected!r}, got {actual!r}")
+        if "status=PCA9685_NOT_READY" not in failing_pca.telemetry_response():
+            raise RuntimeError("missing PCA failure telemetry")
+
+        mid_sequence_failure = FakePca9685(calibration, fail_after_servo_writes=1)
+        if handle_frame("SERVO:0:90", mid_sequence_failure) != "OK:SERVO:0:90:FS90":
+            raise RuntimeError("first mid-sequence servo write should pass")
+        if handle_frame("SERVO:0:45", mid_sequence_failure) != "ERR:PCA9685_I2C":
+            raise RuntimeError("second mid-sequence servo write should simulate I2C failure")
+        if "status=I2C_ERR" not in mid_sequence_failure.telemetry_response():
+            raise RuntimeError("missing mid-sequence I2C failure telemetry")
         print("fake PCA9685 bridge self-test: ok")
         return
 
@@ -238,9 +280,15 @@ def main():
     slave_name = os.ttyname(slave_fd)
     install_symlink(slave_name, args.symlink)
 
-    fake_pca = FakePca9685(calibration, args.log)
+    fake_pca = FakePca9685(
+        calibration,
+        args.log,
+        pca_ready=not args.pca_unavailable,
+        fail_after_servo_writes=args.fail_after_servo_writes,
+    )
     buffer = bytearray()
     running = True
+    frames_seen = 0
 
     def stop(_signum, _frame):
         nonlocal running
@@ -272,6 +320,11 @@ def main():
                 if byte == ord("\n"):
                     frame = buffer.decode("ascii", errors="replace")
                     buffer.clear()
+                    frames_seen += 1
+                    if args.drop_after_frames is not None and frames_seen > args.drop_after_frames:
+                        print("Simulating serial connection drop.", flush=True)
+                        running = False
+                        break
                     response = handle_frame(frame, fake_pca)
                     if response:
                         print(f"< {frame.strip()}", flush=True)

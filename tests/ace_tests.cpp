@@ -104,6 +104,22 @@ void testSerialEncodingUsesPca9685ChannelZero() {
     require(ace::encodeSerialFrame(servo, endpoint) == "SERVO:0:180\n", "servo channel zero frame");
 }
 
+void testSerialEncodingClosesNamedActionsToAngles() {
+    ace::SerialEndpoint endpoint;
+    endpoint.channel = "0";
+
+    ace::ActuatorCommand close;
+    close.type = "servo";
+    close.action = "close";
+    require(ace::encodeSerialFrame(close, endpoint) == "SERVO:0:15\n", "servo close default frame");
+
+    ace::ActuatorCommand center;
+    center.type = "servo";
+    center.action = "center";
+    center.params["center_angle_deg"] = "88";
+    require(ace::encodeSerialFrame(center, endpoint) == "SERVO:0:88\n", "servo center override frame");
+}
+
 } // namespace
 
 int main() {
@@ -113,6 +129,7 @@ int main() {
         testSchedulerDispatchesTimedEvents();
         testSerialEncoding();
         testSerialEncodingUsesPca9685ChannelZero();
+        testSerialEncodingClosesNamedActionsToAngles();
     } catch (const std::exception& error) {
         std::cerr << "test failed: " << error.what() << '\n';
         return EXIT_FAILURE;

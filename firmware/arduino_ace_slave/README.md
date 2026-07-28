@@ -89,3 +89,14 @@ python3 scripts/bringup_serial.py /dev/tty.usbmodem1101 --mg996r
 - Channels `2-15`: generic 180 degree servo, `600-2400us`, home `90`
 
 These are first-pass calibration values. If a servo buzzes, binds, or pushes into its physical stop, narrow that channel's pulse range in `servo_calibration.hpp`.
+
+## Failure Behavior
+
+- `PING` and `STATUS` stay serial-only.
+- `PCASTATUS` reports PCA9685/I2C readiness.
+- Malformed frames return `ERR:BAD_FRAME`.
+- Bad servo channels return `ERR:SERVO_CHANNEL`.
+- Non-numeric servo angles return `ERR:SERVO_ANGLE`.
+- Out-of-range numeric angles are clamped and logged as `CLAMPED`.
+- I2C failures return `ERR:PCA9685_INIT`, `ERR:PCA9685_NOT_READY`, or `ERR:PCA9685_I2C`.
+- `TELEMETRY` prints the recent command log so bring-up debugging has timestamps and status codes.

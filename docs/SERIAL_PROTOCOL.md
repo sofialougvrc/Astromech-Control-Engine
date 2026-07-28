@@ -65,6 +65,20 @@ OK:TELEMETRY:<count>
 `rx_ms` and `exec_ms` come from Arduino `millis()`. `i2c=255` means the command
 did not touch I2C, which is expected for `PING` and `STATUS`.
 
+## Failure Policy
+
+ACE and the bridge intentionally fail loud on hardware-layer errors:
+
+- Malformed serial frame -> `ERR:BAD_FRAME`; record telemetry with `status=BAD_FRAME`.
+- Unknown command -> `ERR:UNKNOWN_COMMAND`; record telemetry with `status=UNKNOWN_COMMAND`.
+- Bad servo channel -> `ERR:SERVO_CHANNEL`; do not move anything.
+- Non-numeric servo angle -> `ERR:SERVO_ANGLE`; do not move anything.
+- Numeric angle outside the calibrated range -> clamp to the channel profile range, respond `OK:SERVO`, and record telemetry with `status=CLAMPED`.
+- PCA9685 missing at startup or no I2C ACK -> `ERR:PCA9685_INIT` from `PCASTATUS`.
+- PCA9685 unavailable during servo command -> `ERR:PCA9685_NOT_READY` or `ERR:PCA9685_I2C`; do not continue motion.
+- Serial ACK timeout or bridge `ERR:*` while ACE is running `SerialActuator` -> throw a C++ exception and stop the current sequence.
+- Serial connection drop mid-sequence -> next ACK read times out or the write fails; ACE stops instead of chaining later servo commands.
+
 PCA9685 servo channels are zero-based and match the labels on the driver board: `0` through `15`.
 
 Out-of-range angle values are clamped to the servo profile's configured range. For the current bench setup that is `0-180`.
@@ -165,6 +179,19 @@ If you only want to verify the fake bridge protocol and pulse math:
 
 ```sh
 python3 scripts/fake_pca9685_bridge.py --self-test
+```
+
+To rehearse failure modes without hardware:
+
+```sh
+# PCA9685 missing / no I2C ACK
+python3 scripts/fake_pca9685_bridge.py --pca-unavailable
+
+# I2C fails after the first successful servo write
+python3 scripts/fake_pca9685_bridge.py --fail-after-servo-writes 1
+
+# Serial bridge disappears after three received frames
+python3 scripts/fake_pca9685_bridge.py --drop-after-frames 3
 ```
 
 ## Current Hardware Caveat
