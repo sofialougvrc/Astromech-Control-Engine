@@ -11,10 +11,10 @@ struct ServoProfile {
   uint8_t homeAngleDeg;
 };
 
-// Keep calibration data separate from drive logic. These first-pass values are
-// placeholders until the actual FS90/MG996R units are measured on the bench.
+// Keep calibration data separate from drive logic. FS90 uses datasheet pulse
+// width/range values; MG996R remains a placeholder until measured on the bench.
 constexpr ServoProfile DEFAULT_SERVO_PROFILE = {"GENERIC_180", 600, 2400, 0, 180, 90};
-constexpr ServoProfile FS90_SERVO_PROFILE = {"FS90", 500, 2400, 0, 180, 90};
+constexpr ServoProfile FS90_SERVO_PROFILE = {"FS90", 900, 2100, 0, 120, 60};
 constexpr ServoProfile MG996R_SERVO_PROFILE = {"MG996R", 500, 2500, 0, 180, 90};
 
 inline void loadServoCalibration(ServoProfile profiles[], uint8_t channelCount) {

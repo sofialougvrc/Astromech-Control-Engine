@@ -60,12 +60,12 @@ Default serial baud rate is `115200` on both ACE and Arduino. `make test` includ
 
 ### Wire Protocol
 
-The Arduino listener sketch understands four frame types:
+The Arduino listener sketch understands six frame types:
 
 - `PING` — USB serial link check.
 - `STATUS` — confirms the serial parser and firmware loop are alive.
 - `PCASTATUS` — reports PCA9685/I2C readiness.
-- `SERVO:<channel>:<angle>` — drives a servo channel to an angle from `0-180`.
+- `SERVO:<channel>:<angle>` — drives a servo channel to an angle within that channel's calibrated range.
 
 ### Bring-Up Order
 

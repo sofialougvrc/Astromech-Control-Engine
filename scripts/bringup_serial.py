@@ -71,9 +71,9 @@ def run_fs90_sequence(port):
     # moves intentionally avoid easing/smoothing so you can observe the hardware
     # and calibration directly before building fancier motion on top.
     for command, expected_prefix in [
-        ("SERVO:0:90", "OK:SERVO:0:90:"),
+        ("SERVO:0:60", "OK:SERVO:0:60:"),
         ("SERVO:0:0", "OK:SERVO:0:0:"),
-        ("SERVO:0:180", "OK:SERVO:0:180:"),
+        ("SERVO:0:120", "OK:SERVO:0:120:"),
     ]:
         response = send_command(port, command)
         require_ok_prefix(response, expected_prefix, "FS90 servo test")

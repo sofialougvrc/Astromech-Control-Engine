@@ -237,9 +237,10 @@ def main():
             ("PING", "OK:PONG"),
             ("STATUS", "OK:ACE_SERIAL_READY"),
             ("PCASTATUS", "OK:ACE_PCA9685_READY"),
-            ("CALSTATUS", "OK:CAL:0:FS90:500:2400:0:180:90\nOK:CAL:1:MG996R:500:2500:0:180:90"),
-            ("SERVO:0:90", "OK:SERVO:0:90:FS90"),
+            ("CALSTATUS", "OK:CAL:0:FS90:900:2100:0:120:60\nOK:CAL:1:MG996R:500:2500:0:180:90"),
+            ("SERVO:0:60", "OK:SERVO:0:60:FS90"),
             ("SERVO:0:-20", "OK:SERVO:0:0:FS90"),
+            ("SERVO:0:180", "OK:SERVO:0:120:FS90"),
             ("SERVO:1:200", "OK:SERVO:1:180:MG996R"),
             ("SERVO:16:90", "ERR:SERVO_CHANNEL"),
             ("SERVO:0:nope", "ERR:SERVO_ANGLE"),
@@ -249,13 +250,13 @@ def main():
             if actual != expected:
                 raise RuntimeError(f"{frame!r}: expected {expected!r}, got {actual!r}")
         telemetry = handle_frame("TELEMETRY", fake_pca)
-        if "TEL:" not in telemetry or not telemetry.endswith("OK:TELEMETRY:10"):
+        if "TEL:" not in telemetry or not telemetry.endswith("OK:TELEMETRY:11"):
             raise RuntimeError(f"unexpected telemetry response: {telemetry!r}")
 
         failing_pca = FakePca9685(calibration, pca_ready=False)
         failure_checks = [
             ("PCASTATUS", "ERR:PCA9685_INIT"),
-            ("SERVO:0:90", "ERR:PCA9685_NOT_READY"),
+            ("SERVO:0:60", "ERR:PCA9685_NOT_READY"),
             ("TELEMETRY", None),
         ]
         for frame, expected in failure_checks:
@@ -266,7 +267,7 @@ def main():
             raise RuntimeError("missing PCA failure telemetry")
 
         mid_sequence_failure = FakePca9685(calibration, fail_after_servo_writes=1)
-        if handle_frame("SERVO:0:90", mid_sequence_failure) != "OK:SERVO:0:90:FS90":
+        if handle_frame("SERVO:0:60", mid_sequence_failure) != "OK:SERVO:0:60:FS90":
             raise RuntimeError("first mid-sequence servo write should pass")
         if handle_frame("SERVO:0:45", mid_sequence_failure) != "ERR:PCA9685_I2C":
             raise RuntimeError("second mid-sequence servo write should simulate I2C failure")

@@ -15,13 +15,13 @@
       "model": "FEETECH FS90",
       "profile": {
         "name": "FS90",
-        "min_pulse_us": 500,
-        "max_pulse_us": 2400,
+        "min_pulse_us": 900,
+        "max_pulse_us": 2100,
         "min_angle_deg": 0,
-        "max_angle_deg": 180,
-        "home_angle_deg": 90
+        "max_angle_deg": 120,
+        "home_angle_deg": 60
       },
-      "notes": "Initial safe bench servo. Replace pulse values with measured endpoints."
+      "notes": "Datasheet range for initial safe bench servo. Confirm endpoints on the physical unit before mounting."
     },
     {
       "channel": 1,

@@ -45,9 +45,9 @@ STATUS
 PCASTATUS
 CALSTATUS
 TELEMETRY
-SERVO:0:90
+SERVO:0:60
 SERVO:0:0
-SERVO:0:180
+SERVO:0:120
 SERVO:1:90
 ```
 
@@ -57,10 +57,10 @@ Expected responses:
 OK:PONG
 OK:ACE_SERIAL_READY
 OK:ACE_PCA9685_READY
-OK:CAL:0:FS90:500:2400:0:180:90
+OK:CAL:0:FS90:900:2100:0:120:60
 TEL:1:rx_ms=1200:exec_ms=1201:cmd=PING:status=OK:ch=-1:req=-1:applied=-1:pulse_us=0:ticks=0:i2c=255
 OK:TELEMETRY:1
-OK:SERVO:0:90:FS90
+OK:SERVO:0:60:FS90
 OK:SERVO:1:90:MG996R
 ```
 
@@ -84,7 +84,7 @@ python3 scripts/bringup_serial.py /dev/tty.usbmodem1101 --mg996r
 
 ## Channel Profiles
 
-- Channel `0`: FEETECH FS90, `500-2400us`, home `90`
+- Channel `0`: FEETECH FS90, `900-2100us`, range `0-120`, home `60`
 - Channel `1`: MG996R, `500-2500us`, home `90`
 - Channels `2-15`: generic 180 degree servo, `600-2400us`, home `90`
 

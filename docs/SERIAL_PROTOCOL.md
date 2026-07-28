@@ -81,7 +81,7 @@ ACE and the bridge intentionally fail loud on hardware-layer errors:
 
 PCA9685 servo channels are zero-based and match the labels on the driver board: `0` through `15`.
 
-Out-of-range angle values are clamped to the servo profile's configured range. For the current bench setup that is `0-180`.
+Out-of-range angle values are clamped to the servo profile's configured range.
 
 ## ACE Mapping
 
@@ -98,7 +98,7 @@ See `config/actuators.example.json` for the intended actuator-to-device mapping 
 
 The Arduino firmware keeps per-channel servo profiles instead of assuming one universal pulse range:
 
-- Channel `0`: FEETECH FS90, starts at `500-2400us`
+- Channel `0`: FEETECH FS90, datasheet range `900-2100us` across `0-120` degrees
 - Channel `1`: MG996R, starts at `500-2500us`
 - Channels `2-15`: generic 180 degree profile, starts at `600-2400us`
 
@@ -142,7 +142,7 @@ The script stops immediately on the first unexpected response. Its order is:
 1. `PING`: proves USB serial and baud rate.
 2. `STATUS`: proves serial parsing/responding without touching PCA9685.
 3. `PCASTATUS`: proves the PCA9685 initialized over I2C.
-4. `SERVO:0:90`, `SERVO:0:0`, `SERVO:0:180`: moves the low-torque FS90 first.
+4. `SERVO:0:60`, `SERVO:0:0`, `SERVO:0:120`: moves the low-torque FS90 first.
 5. `TELEMETRY`: prints recent command timing, servo pulse, tick, and I2C status.
 6. Optional MG996R test:
 

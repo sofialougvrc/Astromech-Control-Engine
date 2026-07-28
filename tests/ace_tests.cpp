@@ -99,9 +99,9 @@ void testSerialEncodingUsesPca9685ChannelZero() {
     ace::ActuatorCommand servo;
     servo.type = "servo";
     servo.action = "move_to";
-    servo.params["angle_deg"] = "180";
+    servo.params["angle_deg"] = "120";
 
-    require(ace::encodeSerialFrame(servo, endpoint) == "SERVO:0:180\n", "servo channel zero frame");
+    require(ace::encodeSerialFrame(servo, endpoint) == "SERVO:0:120\n", "servo channel zero frame");
 }
 
 void testSerialEncodingClosesNamedActionsToAngles() {
